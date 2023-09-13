@@ -44,6 +44,11 @@ export default class Order {
         return true;
     }
 
+    addItems(items: OrderItem[]) {
+        this._items = this._items.concat(items);
+        this._total = this.total();
+    }
+
     total(): number {
 
         return this._items.reduce((total, item) => {

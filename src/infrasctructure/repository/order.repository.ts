@@ -4,6 +4,7 @@ import OrderRepositoryInterface from "../../domain/repository/order-repository.i
 import Order from "../../domain/entity/order";
 import OrderModel from "../db/sequelize/models/order.model";
 import OrderItemModel from "../db/sequelize/models/order-item.model";
+import OrderItem from "../../domain/entity/order_item";
 
 export default class OrderRepository implements OrderRepositoryInterface {
     
@@ -27,33 +28,62 @@ export default class OrderRepository implements OrderRepositoryInterface {
 
     async update(entity: Order) {
         await OrderModel.update({
-            
+            customer_id: entity.customer_id,
+            total: entity.total(),
         }, { 
-            where: { id: entity.id }
+            where: { id: entity.id },
         });
+
+        const orderModel = await OrderModel.findOne({where: {id: entity.id}});
+
+        const items = await OrderItemModel.findAll({where: {order_id: orderModel.id}});
+        const new_items = entity.items.filter((item) => {
+            return !items.find((i) => i.id === item.id);
+        });
+
+        await OrderItemModel.bulkCreate(new_items.map((item) => {
+            return {
+                id: item.id,
+                price: item.price,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                order_id: orderModel.id,
+            };
+        }));
+
+
     }
     
     async find(id: string): Promise<Order>{
         let orderModel;
 
         try {
-            orderModel = await OrderModel.findOne({where: {id: id}, rejectOnEmpty: true});
+            orderModel = await OrderModel.findOne({where: {id: id}, rejectOnEmpty: true, include: ["items", "customer"]});
             
         } catch (error) {
-            throw new Error("Customer not found");
+            throw new Error("Order not found");
         }
 
-        let order;
+        const items = orderModel.items.map((item) => {
+            const itemFinal = new OrderItem(item.id, item.price, item.product_id, item.quantity);
+            return itemFinal;
+        });
+
+        let order = new Order(orderModel.id, orderModel.customer.id, items);
 
         return order;
     }
+
     async findAll(): Promise<Order[]> {
-        const customerModels = await OrderModel.findAll();
-        return customerModels.map((OrderModel) => {
+        const orderModels = await OrderModel.findAll({include: ["items", "customer"]});
+        return orderModels.map((orderModel) => {
 
+            const items = orderModel.items.map((item) => {
+                const itemFinal = new OrderItem(item.id, item.price, item.product_id, item.quantity);
+                return itemFinal;
+            });
             
-            let order;
-
+            let order = new Order(orderModel.id, orderModel.customer.id, items);
             return order;
         });
     }
